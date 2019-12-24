@@ -59,8 +59,8 @@ CONFIG_SCHEMA = vol.Schema({
     }),
 }, extra=vol.ALLOW_EXTRA)
 
-ID_STRING = '"SIA-DCS"'.encode()
-ID_STRING_ENCODED = '"*SIA-DCS"'.encode()
+ID_STRING = '"ADM-CID"'.encode()
+ID_STRING_ENCODED = '"*ADM-CID"'.encode()
 
 TIME_TILL_UNAVAILABLE = timedelta(minutes=3)
 
@@ -123,9 +123,10 @@ class Hub:
     def manage_string(self, msg):
         _LOGGER.debug("manage_string: " + msg)
         
-        pos = msg.find('/')        
-        assert pos>=0, "Can't find '/', message is possibly encrypted"
-        tipo = msg[pos+1:pos+3]
+        pos = msg.find('|')        
+        assert pos>=0, "Can't find '|', message is possibly encrypted"
+        tipo = msg[pos+1:pos+5]
+        _LOGGER.debug("manage_string: " + tipo)
 
         if tipo in self.reactions:
             reactions = self.reactions[tipo]
