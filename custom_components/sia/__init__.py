@@ -61,21 +61,37 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util.dt import utcnow
 
+from homeassistant.helpers.discovery import load_platform
+
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "sia"
-
+DATA_UPDATED = f"{DOMAIN}_data_updated"
 CONF_ACCOUNT = "account"
 CONF_ENCRYPTION_KEY = "encryption_key"
 CONF_HUBS = "hubs"
 CONF_PING_INTERVAL = "ping_interval"
 CONF_ZONES = "zones"
 
+CONF_AREA = "area"
+CONF_AREAS = "areas"
+CONF_AREANAME = "name"
+CONF_AREATYPE = "type"
+DEFAULT_AREATYPE = "opening"
+
 DEVICE_CLASS_ALARM = "alarm"
 HUB_SENSOR_NAME = "_last_heartbeat"
 HUB_ZONE = 0
 
 TYPES = [DEVICE_CLASS_ALARM, DEVICE_CLASS_MOISTURE, DEVICE_CLASS_SMOKE]
+
+AREA_CONFIG = vol.Schema(
+    {
+        vol.Optional(CONF_AREA): cv.positive_int,
+        vol.Optional(CONF_AREANAME): cv.string,
+        vol.Optional(CONF_AREATYPE, default=DEFAULT_AREATYPE): cv.string,
+    }
+)
 
 ZONE_CONFIG = vol.Schema(
     {
@@ -96,7 +112,8 @@ HUB_CONFIG = vol.Schema(
             vol.Coerce(int), vol.Range(min=1, max=1440)
         ),
         vol.Optional(CONF_ZONES, default=[]): vol.All(cv.ensure_list, [ZONE_CONFIG]),
-    }
+        vol.Optional(CONF_AREAS, default=[]): vol.All(cv.ensure_list, [AREA_CONFIG]),
+    },
 )
 
 CONFIG_SCHEMA = vol.Schema(
@@ -123,11 +140,13 @@ HASS_PLATFORM = None
 from .sia_event import SIAEvent
 from .alarm_control_panel import SIAAlarmControlPanel
 from .binary_sensor import SIABinarySensor
+
 from .sensor import SIASensor
 
 
 def setup(hass, config):
     """Implementation of setup from HA."""
+
     global HASS_PLATFORM
     socketserver.TCPServer.allow_reuse_address = True
     HASS_PLATFORM = hass
@@ -139,8 +158,9 @@ def setup(hass, config):
     for hub_config in config[DOMAIN][CONF_HUBS]:
         hass.data[DOMAIN][hub_config[CONF_ACCOUNT]] = Hub(hass, hub_config)
 
-    for component in ["binary_sensor", "alarm_control_panel", "sensor"]:
-        discovery.load_platform(hass, component, DOMAIN, {}, config)
+#    for component in ["binary_sensor", "alarm_control_panel", "sensor"]:
+#        discovery.load_platform(hass, component, DOMAIN, {}, config)
+#        _LOGGER.debug("discovery.load_platform: " + component)
 
     for hub in HASS_PLATFORM.data[DOMAIN].values():
         for sensor in hub._states.values():
@@ -166,6 +186,18 @@ class Hub:
 
     # main set of responses to certain codes from SIA (see sia_codes for all of them)
     reactions = {
+        "0000": {"type": DEVICE_CLASS_TIMESTAMP, "new_state_eval": "utcnow()", "area": False, "area_cancel": False},
+        "3354": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True, "area": False, "area_cancel": False},
+        "1354": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True, "area": False, "area_cancel": False},
+        "3401": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_AWAY, "area": False, "area_cancel": False},
+        "3441": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_NIGHT, "area": False, "area_cancel": False},
+        "1401": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_DISARMED, "area": False, "area_cancel": False},
+        "1130": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_TRIGGERED, "new_area_state": STATE_ON, "area": True, "area_cancel": False},
+        "3130": {"type": DEVICE_CLASS_ALARM, "new_state": None, "new_area_state": STATE_OFF, "area": True, "area_cancel": False},
+        "1383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": STATE_ALARM_TRIGGERED, "new_area_state": STATE_ON, "area": True, "area_cancel": False},
+        "3383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": None, "new_area_state": STATE_OFF, "area": True, "area_cancel": False},
+        "1406": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": False, "new_area_state": STATE_OFF, "area": False, "area_cancel": True},
+
         "BA": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_TRIGGERED},
         "BR": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_DISARMED},
         "CA": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_AWAY},
@@ -198,6 +230,7 @@ class Hub:
         self._hass = hass
         self._states = {}
         self._zones = [dict(z) for z in hub_config.get(CONF_ZONES)]
+        self._areas = [dict(z) for z in hub_config.get(CONF_AREAS)]
         self._ping_interval = timedelta(minutes=hub_config.get(CONF_PING_INTERVAL))
         self._encrypted = False
         self._ending = "]"
@@ -226,9 +259,15 @@ class Hub:
         # create the hub sensor
         self._upsert_sensor(HUB_ZONE, DEVICE_CLASS_TIMESTAMP)
 
+        for area in self._areas:
+            self._upsert_area_sensor(area.get(CONF_AREA))
+
     def _upsert_sensor(self, zone, sensor_type):
         """ checks if the entity exists, and creates otherwise. always gives back the entity_id """
-        sensor_id = self._get_id(zone, sensor_type)
+        # Modified by fcoach66
+        # sensor_id = self._get_id(zone, sensor_type)
+        sensor_id = self._get_id(int(zone), sensor_type)
+
         if not (sensor_id in self._states.keys()):
             zone_found = False
             for existing_zone in self._zones:
@@ -255,6 +294,7 @@ class Hub:
             )
             if constructor and sensor_name:
                 new_sensor = eval(constructor)(
+                    self._name,
                     sensor_id,
                     sensor_name,
                     sensor_type,
@@ -270,17 +310,52 @@ class Hub:
                 )
         return sensor_id
 
+    def _upsert_area_sensor(self, area):
+        sensor_id = self._get_area_id(int(area))
+
+        if not (sensor_id in self._states.keys()):
+            sensor_name = self._get_area_sensor_name(area)
+            sensor_type = self._get_area_sensor_type(area)
+            constructor = "SIABinarySensor"
+            _LOGGER.debug(
+                "Hub: upsert_area_sensor: Updating sensor: "
+                + sensor_name
+                + ", id: "
+                + sensor_id
+                + ", with constructor: "
+                + constructor
+            )
+            new_sensor = eval(constructor)(
+                self._name,
+                sensor_id,
+                sensor_name,
+                sensor_type,
+                area,
+                self._ping_interval,
+                self._hass,
+            )
+            _LOGGER.debug("Hub: upsert_area_sensor: created sensor: " + str(new_sensor))
+            self._states[sensor_id] = new_sensor
+        return sensor_id
+
+    def _upsert_area_cancel_sensor(self, area):
+        area_cancel_sensor_id = self._get_area_id(int(area))
+        return area_cancel_sensor_id
+
     def _get_id(self, zone=0, sensor_type=None):
         """ Gives back a entity_id according to the variables, defaults to the hub sensor entity_id. """
         if str(zone) == "0":
             return self._name + HUB_SENSOR_NAME
         else:
             if sensor_type:
-                return self._name + "_" + str(zone) + "_" + sensor_type
+                return self._name + "_zone_" + str(zone) + "_" + sensor_type
             else:
                 _LOGGER.error(
                     "Hub: Get ID: Not allowed to create an entity_id without type, unless zone == 0."
                 )
+
+    def _get_area_id(self, area):
+        return self._name + "_area_" + str(area)
 
     def _get_sensor_name(self, zone=0, sensor_type=None):
         """ Gives back a entity_id according to the variables, defaults to the hub sensor entity_id. """
@@ -301,9 +376,28 @@ class Hub:
                 )
                 return None
 
+    def _get_area_sensor_name(self, area):
+        area_name = self._get_area_name(area)
+        return (self._name + " " + area_name)
+
+    def _get_area_sensor_type(self, area):
+        area_type = self._get_area_type(area)
+        return (area_type)
+
+
     def _get_zone_name(self, zone: int):
         return next(
             (z.get(CONF_NAME) for z in self._zones if z.get(CONF_ZONE) == zone), None
+        )
+
+    def _get_area_name(self, area: int):
+        return next(
+            (z.get(CONF_NAME) for z in self._areas if z.get(CONF_AREA) == area), None
+        )
+
+    def _get_area_type(self, area: int):
+        return next(
+            (z.get(CONF_AREATYPE) for z in self._areas if z.get(CONF_AREA) == area), None
         )
 
     def _update_states(self, event):
@@ -313,6 +407,39 @@ class Hub:
         if reaction:
             # get the entity_id (or create it)
             sensor_id = self._upsert_sensor(event.zone, reaction["type"])
+            if reaction["area"] == True:
+                area_sensor_id = self._upsert_area_sensor(int(event.message))
+                new_area_state = reaction.get("new_area_state")
+                area_attr = reaction.get("area_attr")
+                _LOGGER.debug(
+                    "Hub: Update Area States: Will set area state for entity: "
+                    + area_sensor_id
+                    + " to state: "
+                    + (new_area_state)
+                )
+                self._states[area_sensor_id].state = (new_area_state)
+                if area_attr:
+                    _LOGGER.debug(
+                        "Hub: Update States: Will set area attribute entity: %s", area_sensor_id
+                    )
+                    self._states[area_sensor_id].add_attribute(
+                        {
+                            "Last message": utcnow().isoformat()
+                                            + ": SIA: "
+                                            + event.sia_string
+                                            + ", Message: "
+                                            + event.message
+                        }
+                    )
+
+            if reaction["area_cancel"] == True:
+                new_state = reaction.get("new_state")
+                new_area_state = reaction.get("new_area_state")
+                for area in self._areas:
+                    _LOGGER.debug("Hub: Resetting states for area sensor " + self._upsert_area_sensor(area.get(CONF_AREA)))
+                    self._upsert_area_sensor(area.get(CONF_AREA))
+                    self._states[self._upsert_area_sensor(area.get(CONF_AREA))].state = (new_state)
+
             # find out which action to take, update attribute, new state or eval for new state
             attr = reaction.get("attr")
             new_state = reaction.get("new_state")

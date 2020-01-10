@@ -16,14 +16,19 @@ class SIAEvent:
         # Example events: 5BFD0078"*SIA-DCS"6003L0#acct[03D1EA959BCC9E2DA91CACA7AFF472F1CB234708977C4E1E3B86A8ABD45AD9F95F0EFFFF817EE5349572972325BFC856
         # Example events: 5BFD0078"SIA-DCS"6003L0#acct[|Nri1/OP501]_14:12:04,09-25-2019
 
-        regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*Nri(\d*)/([a-zA-z]{2})(.*)]_([0-9:,-]*))?)"
+        # Modified by fcoach66
+        #regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*Nri(\d*)/([a-zA-z]{2})(.*)]_([0-9:,-]*))?)"
+        regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS|ADM-CID|NULL)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*\|([0-90-90-90-9]{4}) ([0-90-9]{2}) ([0-90-90-9]{3})]_([0-9:,-]*))?)"
         matches = re.findall(regex, line)
 
         # check if there is at lease one match
         if not matches:
             raise ValueError("SIAEvent: Constructor: no matches found.")
         # _LOGGER.debug(matches)
-        self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.zone, self.code, self.message, self.timestamp = matches[
+        # Modified by fcoach66
+        # self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.zone, self.code, self.message, self.timestamp =
+        # matches[
+        self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.code, self.zone, self.message, self.timestamp = matches[
             0
         ]
         self.type = ""
@@ -102,6 +107,72 @@ class SIAEvent:
         )
 
     all_codes = {
+        "0000": {
+            "code": "0000",
+            "type": "Communications Restoral",
+            "description": "TRANSMITTER has resumed communication with a RECEIVER",
+            "concerns": "Unused",
+        },
+        "3354": {
+            "code": "3354",
+            "type": "Communications Fail",
+            "description": "RECEIVER and TRANSMITTER",
+            "concerns": "Unused",
+        },
+        "1354": {
+            "code": "1354",
+            "type": "Communications Restoral",
+            "description": "TRANSMITTER has resumed communication with a RECEIVER",
+            "concerns": "Unused",
+        },
+        "3401": {
+            "code": "3401",
+            "type": "Closing Report",
+            "description": "System armed, normal",
+            "concerns": "User number",
+        },
+        "3441": {
+            "code": "3441",
+            "type": "Perimeter Armed",
+            "description": "An area has been perimeter armed",
+            "concerns": "Area number",
+        },
+        "1401": {
+            "code": "1401",
+            "type": "Opening Report",
+            "description": "Account was disarmed",
+            "concerns": "User number",
+        },
+        "1130": {
+            "code": "1130",
+            "type": "Burglary Alarm",
+            "description": "Burglary zone has been violated while armed",
+            "concerns": "Zone or point",
+        },
+        "3130": {
+            "code": "3130",
+            "type": "Burglary Restoral",
+            "description": "Alarm/trouble condition has been eliminated",
+            "concerns": "Zone or point",
+        },
+        "1383": {
+            "code": "1383",
+            "type": "Tamper Alarm",
+            "description": "Alarm equipment enclosure opened",
+            "concerns": "Zone or point",
+        },
+        "3383": {
+            "code": "3383",
+            "type": "Tamper Restoral",
+            "description": "Alarm equipment enclosure has been closed",
+            "concerns": "Zone or point",
+        },
+        "1406": {
+            "code": "1406",
+            "type": "Burglary Cancel",
+            "description": "Alarm has been cancelled by authorized user",
+            "concerns": "User number",
+        },
         "AA": {
             "code": "AA",
             "type": "Alarm – Panel Substitution",
