@@ -64,6 +64,14 @@ sia:
            - alarm
            - moisture
            - smoke
+      areas:
+        - area: 1
+          name: Area1
+          type: opening
+        - area: 2
+          name: Area2
+          type: motion
+
 ```
 
 ## Configuration options
