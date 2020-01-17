@@ -48,7 +48,7 @@ class SIAAlarmControlPanel(AlarmControlPanel, RestoreEntity):
     """Class for SIA Alarm Control Panels."""
 
     def __init__(
-            self, hub_name, entity_id, name, device_class, zone, ping_interval, hass
+            self, hub_name, entity_id, name, device_class, sensor_zone, zone, ping_interval, hass
     ):
         _LOGGER.debug(
             "SIAAlarmControlPanel: init: Initializing SIA Alarm Control Panel: "
@@ -151,6 +151,10 @@ class SIAAlarmControlPanel(AlarmControlPanel, RestoreEntity):
     @property
     def device_state_attributes(self):
         return self._attr
+
+    def add_attribute(self, attr):
+        """Update attributes."""
+        self._attr.update(attr)
 
     @state.setter
     def state(self, state):

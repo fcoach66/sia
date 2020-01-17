@@ -77,6 +77,7 @@ CONF_AREA = "area"
 CONF_AREAS = "areas"
 CONF_AREANAME = "name"
 CONF_AREATYPE = "type"
+CONF_AREAZONE = "zone"
 DEFAULT_AREATYPE = "opening"
 
 DEVICE_CLASS_ALARM = "alarm"
@@ -87,9 +88,10 @@ TYPES = [DEVICE_CLASS_ALARM, DEVICE_CLASS_MOISTURE, DEVICE_CLASS_SMOKE]
 
 AREA_CONFIG = vol.Schema(
     {
-        vol.Optional(CONF_AREA): cv.positive_int,
-        vol.Optional(CONF_AREANAME): cv.string,
+        vol.Required(CONF_AREA): cv.positive_int,
+        vol.Required(CONF_AREANAME): cv.string,
         vol.Optional(CONF_AREATYPE, default=DEFAULT_AREATYPE): cv.string,
+        vol.Optional(CONF_AREAZONE, default=1): cv.positive_int,
     }
 )
 
@@ -186,17 +188,26 @@ class Hub:
 
     # main set of responses to certain codes from SIA (see sia_codes for all of them)
     reactions = {
-        "0000": {"type": DEVICE_CLASS_TIMESTAMP, "new_state_eval": "utcnow()", "area": False, "area_cancel": False},
-        "3354": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True, "area": False, "area_cancel": False},
-        "1354": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True, "area": False, "area_cancel": False},
-        "3401": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_AWAY, "area": False, "area_cancel": False},
-        "3441": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_NIGHT, "area": False, "area_cancel": False},
-        "1401": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_DISARMED, "area": False, "area_cancel": False},
-        "1130": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_TRIGGERED, "new_area_state": STATE_ON, "area": True, "area_cancel": False},
-        "3130": {"type": DEVICE_CLASS_ALARM, "new_state": None, "new_area_state": STATE_OFF, "area": True, "area_cancel": False},
-        "1383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": STATE_ALARM_TRIGGERED, "new_area_state": STATE_ON, "area": True, "area_cancel": False},
-        "3383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": None, "new_area_state": STATE_OFF, "area": True, "area_cancel": False},
-        "1406": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": False, "new_area_state": STATE_OFF, "area": False, "area_cancel": True},
+        # ADM-CID reactions codes
+        # if area_attr = True then add message to area sensor attribute when triggered
+        # if new_area_state = STATE_ON then set state to on for area sensor
+        # if new_area_state = STATE_OFF then set state to off for area sensor
+        # if area_cancel = True then set STATE_OFF to all area sensors
+        "0000": {"type": DEVICE_CLASS_TIMESTAMP, "new_state_eval": "utcnow()"},
+        "3354": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True},
+        "1354": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True},
+        "3401": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_AWAY, "attr": True},
+        "3441": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_ARMED_NIGHT, "attr": True},
+        "1401": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_DISARMED, "attr": True},
+        "1130": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_TRIGGERED, "area_attr": True, "new_area_state": STATE_ON, "area": True},
+        "3130": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_area_state": STATE_OFF, "area": True},
+        "1383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": STATE_ALARM_TRIGGERED, "new_area_state": STATE_ON, "area": True},
+        "3383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": None, "new_area_state": STATE_OFF, "area": True},
+        "1406": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": False, "new_area_state": STATE_OFF, "area_cancel": True},
+#        "1305": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True},
+        "1137": {"type": DEVICE_CLASS_ALARM, "new_state_eval": "utcnow()", "attr": True},
+        "1301": {"type": DEVICE_CLASS_ALARM, "new_state_eval": "utcnow()", "attr": True},
+        "3301": {"type": DEVICE_CLASS_ALARM, "new_state_eval": "utcnow()", "attr": True},
 
         "BA": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_TRIGGERED},
         "BR": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_DISARMED},
@@ -283,6 +294,7 @@ class Hub:
 
             # add the new sensor
             sensor_name = self._get_sensor_name(zone, sensor_type)
+            sensor_zone = ""
             constructor = self.sensor_types_classes.get(sensor_type)
             _LOGGER.debug(
                 "Hub: upsert_sensor: Updating sensor: "
@@ -298,6 +310,7 @@ class Hub:
                     sensor_id,
                     sensor_name,
                     sensor_type,
+                    sensor_zone,
                     zone,
                     self._ping_interval,
                     self._hass,
@@ -315,7 +328,12 @@ class Hub:
 
         if not (sensor_id in self._states.keys()):
             sensor_name = self._get_area_sensor_name(area)
+            # if no areas configured in configuration.yaml
+            if not sensor_name:
+                return None
+
             sensor_type = self._get_area_sensor_type(area)
+            sensor_zone = self._get_area_sensor_zone(area)
             constructor = "SIABinarySensor"
             _LOGGER.debug(
                 "Hub: upsert_area_sensor: Updating sensor: "
@@ -330,6 +348,7 @@ class Hub:
                 sensor_id,
                 sensor_name,
                 sensor_type,
+                sensor_zone,
                 area,
                 self._ping_interval,
                 self._hass,
@@ -378,11 +397,18 @@ class Hub:
 
     def _get_area_sensor_name(self, area):
         area_name = self._get_area_name(area)
+        # if no areas configured in configuration.yaml
+        if area_name == None:
+            return None
         return (self._name + " " + area_name)
 
     def _get_area_sensor_type(self, area):
         area_type = self._get_area_type(area)
         return (area_type)
+
+    def _get_area_sensor_zone(self, area):
+        area_zone = self._get_area_zone(area)
+        return (area_zone)
 
 
     def _get_zone_name(self, zone: int):
@@ -400,6 +426,11 @@ class Hub:
             (z.get(CONF_AREATYPE) for z in self._areas if z.get(CONF_AREA) == area), None
         )
 
+    def _get_area_zone(self, area: int):
+        return next(
+            (z.get(CONF_AREAZONE) for z in self._areas if z.get(CONF_AREA) == area), None
+        )
+
     def _update_states(self, event):
         """ Updates the sensors."""
         # find the reactions for that code (if any)
@@ -407,34 +438,35 @@ class Hub:
         if reaction:
             # get the entity_id (or create it)
             sensor_id = self._upsert_sensor(event.zone, reaction["type"])
-            if reaction["area"] == True:
-                area_sensor_id = self._upsert_area_sensor(int(event.message))
-                new_area_state = reaction.get("new_area_state")
-                area_attr = reaction.get("area_attr")
-                _LOGGER.debug(
-                    "Hub: Update Area States: Will set area state for entity: "
-                    + area_sensor_id
-                    + " to state: "
-                    + (new_area_state)
-                )
-                self._states[area_sensor_id].state = (new_area_state)
-                if area_attr:
-                    _LOGGER.debug(
-                        "Hub: Update States: Will set area attribute entity: %s", area_sensor_id
-                    )
-                    self._states[area_sensor_id].add_attribute(
-                        {
-                            "Last message": utcnow().isoformat()
-                                            + ": SIA: "
-                                            + event.sia_string
-                                            + ", Message: "
-                                            + event.message
-                        }
-                    )
 
-            if reaction["area_cancel"] == True:
-                new_state = reaction.get("new_state")
-                new_area_state = reaction.get("new_area_state")
+            if reaction.get("area") == True:
+                area_sensor_id = self._upsert_area_sensor(int(event.message))
+                if area_sensor_id:
+                    new_area_state = reaction.get("new_area_state")
+                    area_attr = reaction.get("area_attr")
+                    _LOGGER.debug(
+                        "Hub: Update Area States: Will set area state for entity: "
+                        + area_sensor_id
+                        + " to state: "
+                        + (new_area_state)
+                    )
+                    self._states[area_sensor_id].state = (new_area_state)
+                    if area_attr:
+                        _LOGGER.debug(
+                            "Hub: Update States: Will set area attribute entity: %s", area_sensor_id
+                        )
+                        self._states[area_sensor_id].add_attribute(
+                            {
+                                "Last message": utcnow().isoformat()
+                                                + ": SIA: "
+                                                + event.sia_string
+                                                + ", Message: "
+                                                + event.message
+                            }
+                        )
+
+            if reaction.get("area_cancel") == True:
+                new_state = False
                 for area in self._areas:
                     _LOGGER.debug("Hub: Resetting states for area sensor " + self._upsert_area_sensor(area.get(CONF_AREA)))
                     self._upsert_area_sensor(area.get(CONF_AREA))

@@ -40,12 +40,15 @@ class SIABinarySensor(RestoreEntity):
     """Class for SIA Binary Sensors."""
 
     def __init__(
-        self, hub_name, entity_id, name, device_class, zone, ping_interval, hass
+        self, hub_name, entity_id, name, device_class, sensor_zone, zone, ping_interval, hass
     ):
         self._device_class = device_class
         self._should_poll = False
         self._ping_interval = ping_interval
-        self._attr = {CONF_PING_INTERVAL: self.ping_interval, CONF_ZONE: zone}
+        if sensor_zone:
+            self._attr = {CONF_PING_INTERVAL: self.ping_interval, CONF_AREA: zone, CONF_ZONE: sensor_zone}
+        else:
+            self._attr = {CONF_PING_INTERVAL: self.ping_interval, CONF_ZONE: zone}
         self.entity_id = generate_entity_id(
             entity_id_format=BINARY_SENSOR_FORMAT, name=entity_id, hass=hass
         )
@@ -86,10 +89,6 @@ class SIABinarySensor(RestoreEntity):
     def state(self):
         return STATE_ON if self.is_on else STATE_OFF
 
-#    @property
-#    def state_off(self):
-#        return STATE_OFF
-
     @property
     def unique_id(self) -> str:
         return self._unique_id
@@ -119,12 +118,6 @@ class SIABinarySensor(RestoreEntity):
     def state(self, state):
         self._state = state
         self.async_schedule_update_ha_state()
-
-#    @state_off.setter
-#    def state_off(self, state_off):
-#        self._state = state_off
-#        _LOGGER.debug(self._state)
-#        self.async_schedule_update_ha_state()
 
     def assume_available(self):
         """Reset unavalability tracker."""

@@ -32,7 +32,7 @@ class SIASensor(RestoreEntity):
     """Class for SIA Sensors."""
 
     def __init__(
-            self, hub_name, entity_id, name, device_class, zone, ping_interval, hass
+            self, hub_name, entity_id, name, device_class, sensor_zone, zone, ping_interval, hass
     ):
         self._should_poll = False
         self._device_class = device_class

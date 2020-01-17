@@ -16,21 +16,28 @@ class SIAEvent:
         # Example events: 5BFD0078"*SIA-DCS"6003L0#acct[03D1EA959BCC9E2DA91CACA7AFF472F1CB234708977C4E1E3B86A8ABD45AD9F95F0EFFFF817EE5349572972325BFC856
         # Example events: 5BFD0078"SIA-DCS"6003L0#acct[|Nri1/OP501]_14:12:04,09-25-2019
 
-        # Modified by fcoach66
-        #regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*Nri(\d*)/([a-zA-z]{2})(.*)]_([0-9:,-]*))?)"
-        regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS|ADM-CID|NULL)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*\|([0-90-90-90-9]{4}) ([0-90-9]{2}) ([0-90-90-9]{3})]_([0-9:,-]*))?)"
-        matches = re.findall(regex, line)
+        # Match and set protocol type (SIA-DCS ord ADM-CID)
+        protregex = r".{4}0[A-F0-9]{3}\"(SIA-DCS|\*SIA-DCS|ADM-CID|\*ADM-CID|NULL|\*NULL)\""
+        protmatch = re.findall(protregex, line)
+        self.message_type = protmatch[ 0 ]
+        if self.message_type == "SIA-DCS" or self.message_type == "*SIA-DCS":
+            regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*Nri(\d*)/([a-zA-z]{2})(.*)]_([0-9:,-]*))?)"
+            matches = re.findall(regex, line)
+            self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.zone, self.code, self.message, self.timestamp = matches[
+                0
+            ]
+        elif self.message_type == "ADM-CID" or self.message_type == "*ADM-CID" or self.message_type == "NULL" or self.message_type == "*NULL":
+            regex = r"(.{4})0[A-F0-9]{3}(\"(SIA-DCS|\*SIA-DCS|ADM-CID|\*ADM-CID|NULL|\*NULL)\"([0-9]{4})(R[A-F0-9]{1,6})?(L[A-F0-9]{1,6})#([A-F0-9]{3,16})\[([A-F0-9]*)?(.*\|([0-90-90-90-9]{4}) ([0-90-9]{2}) ([0-90-90-9]{3})]_([0-9:,-]*))?)"
+            matches = re.findall(regex, line)
+            self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.code, self.zone, self.message, self.timestamp = \
+            matches[
+                0
+            ]
 
         # check if there is at lease one match
         if not matches:
             raise ValueError("SIAEvent: Constructor: no matches found.")
-        # _LOGGER.debug(matches)
-        # Modified by fcoach66
-        # self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.zone, self.code, self.message, self.timestamp =
-        # matches[
-        self.msg_crc, self.full_message, self.message_type, self.sequence, self.receiver, self.prefix, self.account, self.encrypted_content, self.content, self.code, self.zone, self.message, self.timestamp = matches[
-            0
-        ]
+
         self.type = ""
         self.description = ""
         self.concerns = ""
@@ -167,11 +174,35 @@ class SIAEvent:
             "description": "Alarm equipment enclosure has been closed",
             "concerns": "Zone or point",
         },
+        "1137": {
+            "code": "1137",
+            "type": "Tamper Alarm",
+            "description": "Alarm equipment enclosure opened",
+            "concerns": "Zone or point",
+        },
         "1406": {
             "code": "1406",
             "type": "Burglary Cancel",
             "description": "Alarm has been cancelled by authorized user",
             "concerns": "User number",
+        },
+        "1305": {
+            "code": "1305",
+            "type": "Remote Reset",
+            "description": "A TRANSMITTER was reset via a remote programmer",
+            "concerns": "Unused",
+        },
+        "1301": {
+            "code": "1301",
+            "type": "AC Trouble",
+            "description": "AC power has been failed",
+            "concerns": "Unused",
+        },
+        "3301": {
+            "code": "3301",
+            "type": "AC Restoral",
+            "description": "AC power has been restored",
+            "concerns": "Unused",
         },
         "AA": {
             "code": "AA",
