@@ -203,8 +203,9 @@ class Hub:
         "3130": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_area_state": STATE_OFF, "area": True},
         "1383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": STATE_ALARM_TRIGGERED, "new_area_state": STATE_ON, "area": True},
         "3383": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": None, "new_area_state": STATE_OFF, "area": True},
-        "1406": {"type": DEVICE_CLASS_ALARM, "area_attr": True, "new_state": False, "new_area_state": STATE_OFF, "area_cancel": True},
+        "1406": {"type": DEVICE_CLASS_ALARM, "attr": True},
 #        "1305": {"type": DEVICE_CLASS_TIMESTAMP, "attr": True},
+        "1454": {"type": DEVICE_CLASS_ALARM, "new_state": STATE_ALARM_DISARMED, "attr": True},
         "1137": {"type": DEVICE_CLASS_ALARM, "new_state_eval": "utcnow()", "attr": True},
         "1301": {"type": DEVICE_CLASS_ALARM, "new_state_eval": "utcnow()", "attr": True},
         "3301": {"type": DEVICE_CLASS_ALARM, "new_state_eval": "utcnow()", "attr": True},
@@ -436,21 +437,18 @@ class Hub:
         # find the reactions for that code (if any)
         reaction = self.reactions.get(event.code)
         if reaction:
-            # get the entity_id (or create it)
-            sensor_id = self._upsert_sensor(event.zone, reaction["type"])
-
             if reaction.get("area") == True:
                 area_sensor_id = self._upsert_area_sensor(int(event.message))
                 if area_sensor_id:
-                    new_area_state = reaction.get("new_area_state")
+                    new_state = reaction.get("new_area_state")
                     area_attr = reaction.get("area_attr")
                     _LOGGER.debug(
                         "Hub: Update Area States: Will set area state for entity: "
                         + area_sensor_id
                         + " to state: "
-                        + (new_area_state)
+                        + (new_state)
                     )
-                    self._states[area_sensor_id].state = (new_area_state)
+                    self._states[area_sensor_id].state = (new_state)
                     if area_attr:
                         _LOGGER.debug(
                             "Hub: Update States: Will set area attribute entity: %s", area_sensor_id
@@ -465,12 +463,15 @@ class Hub:
                             }
                         )
 
-            if reaction.get("area_cancel") == True:
-                new_state = False
-                for area in self._areas:
-                    _LOGGER.debug("Hub: Resetting states for area sensor " + self._upsert_area_sensor(area.get(CONF_AREA)))
-                    self._upsert_area_sensor(area.get(CONF_AREA))
-                    self._states[self._upsert_area_sensor(area.get(CONF_AREA))].state = (new_state)
+            #if reaction.get("area_cancel") == True:
+            #    new_state = False
+            #    for area in self._areas:
+            #        _LOGGER.debug("Hub: Resetting states for area sensor " + self._upsert_area_sensor(area.get(CONF_AREA)))
+            #        self._upsert_area_sensor(area.get(CONF_AREA))
+            #        self._states[self._upsert_area_sensor(area.get(CONF_AREA))].state = (new_state)
+
+            # get the entity_id (or create it)
+            sensor_id = self._upsert_sensor(event.zone, reaction["type"])
 
             # find out which action to take, update attribute, new state or eval for new state
             attr = reaction.get("attr")

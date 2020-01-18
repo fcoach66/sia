@@ -87,7 +87,7 @@ class SIABinarySensor(RestoreEntity):
 
     @property
     def state(self):
-        return STATE_ON if self.is_on else STATE_OFF
+        return STATE_ON if self.is_on == "on" else STATE_OFF
 
     @property
     def unique_id(self) -> str:

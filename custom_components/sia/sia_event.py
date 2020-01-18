@@ -204,6 +204,12 @@ class SIAEvent:
             "description": "AC power has been restored",
             "concerns": "Unused",
         },
+        "1454": {
+            "code": "1454",
+            "type": "Fail to Close",
+            "description": "An area has not been armed at the end of the closing window",
+            "concerns": "Area number",
+        },
         "AA": {
             "code": "AA",
             "type": "Alarm – Panel Substitution",
