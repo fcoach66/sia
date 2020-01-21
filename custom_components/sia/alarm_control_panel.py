@@ -4,6 +4,7 @@ import logging
 
 from homeassistant.core import callback
 from homeassistant.helpers.entity import generate_entity_id
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.components.alarm_control_panel import AlarmControlPanel
@@ -87,12 +88,14 @@ class SIAAlarmControlPanel(AlarmControlPanel, RestoreEntity):
             else:
                 self.state = None
         else:
-            self.state = STATE_ALARM_DISARMED  # assume disarmed
+            _LOGGER.debug("SIAAlarmControlPanel: no previous state.")
+            return
+            # self.state = STATE_ALARM_DISARMED  # assume disarmed
         _LOGGER.debug("SIAAlarmControlPanel: added: state: " + str(state))
         self._async_track_unavailable()
-        # async_dispatcher_connect(
-        #     self._hass, DATA_UPDATED, self._schedule_immediate_update
-        # )
+        async_dispatcher_connect(
+            self.hass, DATA_UPDATED, self._schedule_immediate_update
+        )
 
     @callback
     def _schedule_immediate_update(self):
@@ -191,9 +194,9 @@ class SIAAlarmControlPanel(AlarmControlPanel, RestoreEntity):
         """Return the list of supported features."""
         return (
 
-                SUPPORT_ALARM_ARM_AWAY
-                | SUPPORT_ALARM_ARM_CUSTOM_BYPASS
-                | SUPPORT_ALARM_ARM_HOME
-                | SUPPORT_ALARM_ARM_NIGHT
-                | SUPPORT_ALARM_TRIGGER
+            SUPPORT_ALARM_ARM_AWAY
+            | SUPPORT_ALARM_ARM_CUSTOM_BYPASS
+            | SUPPORT_ALARM_ARM_HOME
+            | SUPPORT_ALARM_ARM_NIGHT
+            | SUPPORT_ALARM_TRIGGER
         )

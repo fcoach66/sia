@@ -61,7 +61,7 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util.dt import utcnow
 
-from homeassistant.helpers.discovery import load_platform
+#from homeassistant.helpers.discovery import load_platform
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -358,9 +358,9 @@ class Hub:
             self._states[sensor_id] = new_sensor
         return sensor_id
 
-    def _upsert_area_cancel_sensor(self, area):
-        area_cancel_sensor_id = self._get_area_id(int(area))
-        return area_cancel_sensor_id
+#    def _upsert_area_cancel_sensor(self, area):
+#        area_cancel_sensor_id = self._get_area_id(int(area))
+#        return area_cancel_sensor_id
 
     def _get_id(self, zone=0, sensor_type=None):
         """ Gives back a entity_id according to the variables, defaults to the hub sensor entity_id. """
@@ -368,7 +368,7 @@ class Hub:
             return self._name + HUB_SENSOR_NAME
         else:
             if sensor_type:
-                return self._name + "_zone_" + str(zone) + "_" + sensor_type
+                return self._name + "_" + str(zone) + "_" + sensor_type
             else:
                 _LOGGER.error(
                     "Hub: Get ID: Not allowed to create an entity_id without type, unless zone == 0."
